@@ -1,0 +1,21 @@
+{
+  "name": "testcafe-lambda",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "dependencies": {
+    "isomorphic-fetch": "=2.2.1",
+    "puppeteer": "=1.17.0",
+    "testcafe": "=1.2.0",
+    "tmp": "=0.1.0"
+  },
+  "devDependencies": {
+    "prettier": "=1.16.4"
+  },
+  "scripts": {
+    "prettier": "prettier --write \"**/**.{js,json,babelrc}\"",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "ISC"
+}
