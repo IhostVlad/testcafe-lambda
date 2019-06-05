@@ -4,12 +4,33 @@ const createTestCafe = require('testcafe')
 const stream = require('stream')
 const path = require('path')
 const fs = require('fs')
-const tmp = require('tmp')
+
+const CHROME_FLAGS = [
+  '--disable-background-networking',
+  '--enable-features=NetworkService,NetworkServiceInProcess',
+  '--disable-background-timer-throttling',
+  '--disable-backgrounding-occluded-windows',
+  '--disable-breakpad',
+  '--disable-client-side-phishing-detection',
+  '--disable-default-apps',
+  '--disable-dev-shm-usage',
+  '--disable-extensions',
+  '--disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees',
+  '--disable-hang-monitor',
+  '--disable-ipc-flooding-protection',
+  '--disable-popup-blocking',
+  '--disable-prompt-on-repost',
+  '--disable-renderer-backgrounding',
+  '--disable-sync',
+  '--force-color-profile=srgb',
+  '--metrics-recording-only',
+  '--no-first-run',
+  '--enable-automation',
+  '--password-store=basic',
+  '--use-mock-keychain'
+]
 
 const createTempFile = async (prefix, postfix) => {
-  if (!fs.existsSync('/tmp')) {
-    return tmp.fileSync({ prefix, postfix }).name
-  }
   const randFileName = `${prefix}-${Date.now()}${Math.floor(
     Math.random() * 1000000000000
   )}${postfix}`
@@ -20,10 +41,6 @@ const createTempFile = async (prefix, postfix) => {
 }
 
 const createTempDir = async () => {
-  if (!fs.existsSync('/tmp')) {
-    return tmp.dirSync().name
-  }
-
   const randDirName = `${Date.now()}${Math.floor(
     Math.random() * 1000000000000
   )}`
@@ -81,12 +98,10 @@ const launcherPromise = (async () => {
       )}`,
       version: '1.0.0',
       dependencies: {
-        puppeteer: '=1.17.0'
+        '@serverless-chrome/lambda': '1.0.0-55'
       }
     })
   )
-
-  delete process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
 
   const originalHome = process.env.HOME
   if (fs.existsSync('/tmp')) {
@@ -98,16 +113,15 @@ const launcherPromise = (async () => {
     stdio: 'inherit'
   })
 
-  console.log(
-    'Headless browser is done and available at',
-    path.join(tmpDir, 'node_modules', 'puppeteer')
+  const chromeLambdaPath = path.join(
+    tmpDir,
+    'node_modules',
+    '@serverless-chrome',
+    'lambda'
   )
+  console.log('Headless browser is done and available at', chromeLambdaPath)
 
-  const localPuppeteerPath = path.join(tmpDir, 'node_modules', 'puppeteer')
-
-  const launcher = require(localPuppeteerPath)
-
-  process.env.HOME = originalHome
+  const launcher = require(chromeLambdaPath)
 
   return launcher
 })()
@@ -125,10 +139,11 @@ const worker = async originalTestFilesPaths => {
     const connectionDonePromise = new Promise(resolve =>
       remoteConnection.once('ready', resolve)
     )
-    browser = await launcher.launch()
-    console.log('Headless browser launched as', await browser.userAgent())
+    browser = await launcher({
+      flags: [...CHROME_FLAGS, `--homepage=${remoteConnection.url}`]
+    })
+    console.log('Headless browser launched as', browser.pid)
 
-    await (await browser.newPage()).goto(remoteConnection.url)
     await connectionDonePromise
     console.log('Testcafe server accepted connection from headless browser')
 
@@ -181,7 +196,7 @@ const worker = async originalTestFilesPaths => {
     }
 
     if (browser != null) {
-      await browser.close()
+      await browser.kill()
     }
   }
 }

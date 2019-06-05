@@ -5,8 +5,7 @@
   "main": "index.js",
   "dependencies": {
     "isomorphic-fetch": "=2.2.1",
-    "testcafe": "=1.2.0",
-    "tmp": "=0.1.0"
+    "testcafe": "=1.2.0"
   },
   "devDependencies": {
     "prettier": "=1.16.4"
