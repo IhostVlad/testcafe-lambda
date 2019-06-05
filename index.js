@@ -6,6 +6,33 @@ const path = require('path')
 const fs = require('fs')
 const tmp = require('tmp')
 
+const createTempFile = async (prefix, postfix) => {
+  if (!fs.existsSync('/tmp')) {
+    return tmp.fileSync({ prefix, postfix }).name
+  }
+  const randFileName = `${prefix}-${Date.now()}${Math.floor(
+    Math.random() * 1000000000000
+  )}${postfix}`
+  const randFilePath = path.join('/tmp', randFileName)
+  fs.writeFileSync(randFilePath, '')
+
+  return randFilePath
+}
+
+const createTempDir = async () => {
+  if (!fs.existsSync('/tmp')) {
+    return tmp.dirSync().name
+  }
+
+  const randDirName = `${Date.now()}${Math.floor(
+    Math.random() * 1000000000000
+  )}`
+  const randDirPath = path.join('/tmp', randDirName)
+  fs.mkdirSync(randDirPath)
+
+  return randDirPath
+}
+
 const fetchTestFiles = async originalTestFilesPaths => {
   const result = []
   for (const testFilePath of [].concat(originalTestFilesPaths)) {
@@ -21,12 +48,12 @@ const fetchTestFiles = async originalTestFilesPaths => {
 
     try {
       const content = await (await fetch(testFilePath)).text()
-      const tmpFile = tmp.fileSync({
-        prefix: testFilePath.replace(/[^A-Za-z0-9-]+/gi, '-'),
-        postfix: '.js'
-      })
-      fs.writeFileSync(tmpFile.name, content)
-      result.push(tmpFile.name)
+      const tmpFile = await createTempFile(
+        testFilePath.replace(/[^A-Za-z0-9-]+/gi, '-'),
+        '.js'
+      )
+      fs.writeFileSync(tmpFile, content)
+      result.push(tmpFile)
       continue
     } catch (error) {}
 
@@ -37,9 +64,9 @@ const fetchTestFiles = async originalTestFilesPaths => {
 }
 
 const launcherPromise = (async () => {
-  const tmpDir = tmp.dirSync()
+  const tmpDir = await createTempDir()
   fs.writeFileSync(
-    path.join(tmpDir.name, 'package.json'),
+    path.join(tmpDir, 'package.json'),
     JSON.stringify({
       name: `testcafe-lambda-${Date.now()}-${Math.floor(
         Math.random() * 10000000000000000
@@ -54,16 +81,16 @@ const launcherPromise = (async () => {
   delete process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
 
   childProcess.execSync('npm install', {
-    cwd: tmpDir.name,
+    cwd: tmpDir,
     stdio: 'inherit'
   })
 
   console.log(
     'Headless browser is done and available at',
-    path.join(tmpDir.name, 'node_modules', 'puppeteer')
+    path.join(tmpDir, 'node_modules', 'puppeteer')
   )
 
-  const localPuppeteerPath = path.join(tmpDir.name, 'node_modules', 'puppeteer')
+  const localPuppeteerPath = path.join(tmpDir, 'node_modules', 'puppeteer')
 
   return require(localPuppeteerPath)
 })()
