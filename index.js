@@ -1,6 +1,6 @@
 const fetch = require('isomorphic-fetch')
+const childProcess = require('child_process')
 const createTestCafe = require('testcafe')
-const launcher = require('puppeteer')
 const stream = require('stream')
 const path = require('path')
 const fs = require('fs')
@@ -36,10 +36,43 @@ const fetchTestFiles = async originalTestFilesPaths => {
   return result
 }
 
+const launcherPromise = (async () => {
+  const tmpDir = tmp.dirSync()
+  fs.writeFileSync(
+    path.join(tmpDir.name, 'package.json'),
+    JSON.stringify({
+      name: `testcafe-lambda-${Date.now()}-${Math.floor(
+        Math.random() * 10000000000000000
+      )}`,
+      version: '1.0.0',
+      dependencies: {
+        puppeteer: '=1.17.0'
+      }
+    })
+  )
+
+  delete process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
+
+  childProcess.execSync('npm install', {
+    cwd: tmpDir.name,
+    stdio: 'inherit'
+  })
+
+  console.log(
+    'Headless browser is done and available at',
+    path.join(tmpDir.name, 'node_modules', 'puppeteer')
+  )
+
+  const localPuppeteerPath = path.join(tmpDir.name, 'node_modules', 'puppeteer')
+
+  return require(localPuppeteerPath)
+})()
+
 const worker = async originalTestFilesPaths => {
   let testcafe = null,
     browser = null
   try {
+    const launcher = await launcherPromise
     const testFilesPaths = await fetchTestFiles(originalTestFilesPaths)
     const testcafe = await createTestCafe('localhost', 1337, 1338)
     const remoteConnection = await testcafe.createBrowserConnection()
