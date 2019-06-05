@@ -36,15 +36,20 @@ const createTempDir = async () => {
 const fetchTestFiles = async originalTestFilesPaths => {
   const result = []
   for (const testFilePath of [].concat(originalTestFilesPaths)) {
-    if (fs.existsSync(testFilePath)) {
-      result.push(testFilePath)
-      continue
-    }
-    const fullTestFilePath = path.join(process.cwd(), testFilePath)
-    if (fs.existsSync(fullTestFilePath)) {
-      result.push(fullTestFilePath)
-      continue
-    }
+    try {
+      if (fs.existsSync(testFilePath)) {
+        result.push(testFilePath)
+        continue
+      }
+    } catch (error) {}
+
+    try {
+      const fullTestFilePath = path.join(process.cwd(), testFilePath)
+      if (fs.existsSync(fullTestFilePath)) {
+        result.push(fullTestFilePath)
+        continue
+      }
+    } catch (error) {}
 
     try {
       const content = await (await fetch(testFilePath)).text()
@@ -113,7 +118,7 @@ const worker = async originalTestFilesPaths => {
   try {
     const launcher = await launcherPromise
     const testFilesPaths = await fetchTestFiles(originalTestFilesPaths)
-    const testcafe = await createTestCafe('localhost', 1337, 1338)
+    testcafe = await createTestCafe('localhost', 1337, 1338)
     const remoteConnection = await testcafe.createBrowserConnection()
     console.log('Testcafe server launched at', remoteConnection.url)
 
