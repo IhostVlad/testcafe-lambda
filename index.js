@@ -1,5 +1,6 @@
 const fetch = require('isomorphic-fetch')
 const childProcess = require('child_process')
+const chromium = require('chrome-aws-lambda')
 const createTestCafe = require('testcafe')
 const stream = require('stream')
 const path = require('path')
@@ -50,49 +51,10 @@ const fetchTestFiles = async originalTestFilesPaths => {
   return result
 }
 
-const launcherPromise = (async () => {
-  const tmpDir = '/tmp/testcafe-lambda-puttetier'
-  if (!fs.existsSync(tmpDir)) {
-    fs.mkdirSync(tmpDir)
-    console.log('Loading headless browser into', tmpDir)
-
-    fs.writeFileSync(
-      path.join(tmpDir, 'package.json'),
-      JSON.stringify({
-        name: `testcafe-lambda-${Date.now()}-${Math.floor(
-          Math.random() * 10000000000000000
-        )}`,
-        version: '1.0.0',
-        dependencies: {
-          puppeteer: '1.17.0'
-        }
-      })
-    )
-
-    const originalHome = process.env.HOME
-    process.env.HOME = '/tmp'
-
-    childProcess.execSync('npm install', {
-      cwd: tmpDir,
-      stdio: 'inherit'
-    })
-
-    process.env.HOME = originalHome
-  }
-
-  const launcherPath = path.join(tmpDir, 'node_modules', 'puppeteer')
-  console.log('Headless browser is done and available at', launcherPath)
-
-  const launcher = require(launcherPath)
-
-  return launcher
-})()
-
 const worker = async originalTestFilesPaths => {
   let testcafe = null,
     browser = null
   try {
-    const launcher = await launcherPromise
     const testFilesPaths = await fetchTestFiles(originalTestFilesPaths)
     testcafe = await createTestCafe('localhost', 1337, 1338)
     const remoteConnection = await testcafe.createBrowserConnection()
@@ -101,7 +63,13 @@ const worker = async originalTestFilesPaths => {
     const connectionDonePromise = new Promise(resolve =>
       remoteConnection.once('ready', resolve)
     )
-    browser = await launcher.launch()
+
+    browser = await chromium.puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath: await chromium.executablePath,
+      headless: chromium.headless
+    })
 
     console.log('Headless browser launched as', await browser.userAgent())
 
@@ -157,7 +125,7 @@ const worker = async originalTestFilesPaths => {
     }
 
     if (browser != null) {
-      await browser.kill()
+      await browser.close()
     }
   }
 }
