@@ -5,31 +5,6 @@ const stream = require('stream')
 const path = require('path')
 const fs = require('fs')
 
-const CHROME_FLAGS = [
-  '--disable-background-networking',
-  '--enable-features=NetworkService,NetworkServiceInProcess',
-  '--disable-background-timer-throttling',
-  '--disable-backgrounding-occluded-windows',
-  '--disable-breakpad',
-  '--disable-client-side-phishing-detection',
-  '--disable-default-apps',
-  '--disable-dev-shm-usage',
-  '--disable-extensions',
-  '--disable-features=site-per-process,TranslateUI,BlinkGenPropertyTrees',
-  '--disable-hang-monitor',
-  '--disable-ipc-flooding-protection',
-  '--disable-popup-blocking',
-  '--disable-prompt-on-repost',
-  '--disable-renderer-backgrounding',
-  '--disable-sync',
-  '--force-color-profile=srgb',
-  '--metrics-recording-only',
-  '--no-first-run',
-  '--enable-automation',
-  '--password-store=basic',
-  '--use-mock-keychain'
-]
-
 const createTempFile = async (prefix, postfix) => {
   const randFileName = `${prefix}-${Date.now()}${Math.floor(
     Math.random() * 1000000000000
@@ -38,16 +13,6 @@ const createTempFile = async (prefix, postfix) => {
   fs.writeFileSync(randFilePath, '')
 
   return randFilePath
-}
-
-const createTempDir = async () => {
-  const randDirName = `${Date.now()}${Math.floor(
-    Math.random() * 1000000000000
-  )}`
-  const randDirPath = path.join('/tmp', randDirName)
-  fs.mkdirSync(randDirPath)
-
-  return randDirPath
 }
 
 const fetchTestFiles = async originalTestFilesPaths => {
@@ -86,42 +51,39 @@ const fetchTestFiles = async originalTestFilesPaths => {
 }
 
 const launcherPromise = (async () => {
-  const tmpDir = await createTempDir()
+  const tmpDir = '/tmp/testcafe-lambda-puttetier'
+  if (!fs.existsSync(tmpDir)) {
+    fs.mkdirSync(tmpDir)
+    console.log('Loading headless browser into', tmpDir)
 
-  console.log('Loading headless browser into', tmpDir)
+    fs.writeFileSync(
+      path.join(tmpDir, 'package.json'),
+      JSON.stringify({
+        name: `testcafe-lambda-${Date.now()}-${Math.floor(
+          Math.random() * 10000000000000000
+        )}`,
+        version: '1.0.0',
+        dependencies: {
+          puppeteer: '1.17.0'
+        }
+      })
+    )
 
-  fs.writeFileSync(
-    path.join(tmpDir, 'package.json'),
-    JSON.stringify({
-      name: `testcafe-lambda-${Date.now()}-${Math.floor(
-        Math.random() * 10000000000000000
-      )}`,
-      version: '1.0.0',
-      dependencies: {
-        '@serverless-chrome/lambda': '1.0.0-55'
-      }
-    })
-  )
-
-  const originalHome = process.env.HOME
-  if (fs.existsSync('/tmp')) {
+    const originalHome = process.env.HOME
     process.env.HOME = '/tmp'
+
+    childProcess.execSync('npm install', {
+      cwd: tmpDir,
+      stdio: 'inherit'
+    })
+
+    process.env.HOME = originalHome
   }
 
-  childProcess.execSync('npm install', {
-    cwd: tmpDir,
-    stdio: 'inherit'
-  })
+  const launcherPath = path.join(tmpDir, 'node_modules', 'puppeteer')
+  console.log('Headless browser is done and available at', launcherPath)
 
-  const chromeLambdaPath = path.join(
-    tmpDir,
-    'node_modules',
-    '@serverless-chrome',
-    'lambda'
-  )
-  console.log('Headless browser is done and available at', chromeLambdaPath)
-
-  const launcher = require(chromeLambdaPath)
+  const launcher = require(launcherPath)
 
   return launcher
 })()
@@ -139,12 +101,11 @@ const worker = async originalTestFilesPaths => {
     const connectionDonePromise = new Promise(resolve =>
       remoteConnection.once('ready', resolve)
     )
-    browser = await launcher({
-      flags: [...CHROME_FLAGS, `--homepage=${remoteConnection.url}`]
-    })
-    console.log('Headless browser launched as', browser.pid)
+    browser = await launcher.launch()
 
-    await connectionDonePromise
+    console.log('Headless browser launched as', await browser.userAgent())
+
+    await (await browser.newPage()).goto(remoteConnection.url)
     console.log('Testcafe server accepted connection from headless browser')
 
     const reportResults = {}
