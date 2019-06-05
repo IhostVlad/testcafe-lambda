@@ -65,6 +65,9 @@ const fetchTestFiles = async originalTestFilesPaths => {
 
 const launcherPromise = (async () => {
   const tmpDir = await createTempDir()
+
+  console.log('Loading headless browser into', tmpDir)
+
   fs.writeFileSync(
     path.join(tmpDir, 'package.json'),
     JSON.stringify({
@@ -80,6 +83,11 @@ const launcherPromise = (async () => {
 
   delete process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD
 
+  const originalHome = process.env.HOME
+  if (fs.existsSync('/tmp')) {
+    process.env.HOME = '/tmp'
+  }
+
   childProcess.execSync('npm install', {
     cwd: tmpDir,
     stdio: 'inherit'
@@ -92,7 +100,11 @@ const launcherPromise = (async () => {
 
   const localPuppeteerPath = path.join(tmpDir, 'node_modules', 'puppeteer')
 
-  return require(localPuppeteerPath)
+  const launcher = require(localPuppeteerPath)
+
+  process.env.HOME = originalHome
+
+  return launcher
 })()
 
 const worker = async originalTestFilesPaths => {
